@@ -3,13 +3,10 @@ package com.alibaba.json.bvt.bug;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.TypeReference;
 import junit.framework.TestCase;
-import org.apache.commons.io.IOUtils;
 
 import java.awt.Point;
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.zip.GZIPInputStream;
 
 /**
  * Created by wenshao on 2016/10/19.

@@ -3,6 +3,7 @@ package com.alibaba.fastjson.parser.deserializer;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
+import java.lang.reflect.WildcardType;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Map;
@@ -27,7 +28,15 @@ public class ArrayListTypeFieldDeserializer extends FieldDeserializer {
 
         Type fieldType = fieldInfo.fieldType;
         if (fieldType instanceof ParameterizedType) {
-            this.itemType = ((ParameterizedType) fieldInfo.fieldType).getActualTypeArguments()[0];
+            Type argType = ((ParameterizedType) fieldInfo.fieldType).getActualTypeArguments()[0];
+            if (argType instanceof WildcardType) {
+                WildcardType wildcardType = (WildcardType) argType;
+                Type[] upperBounds = wildcardType.getUpperBounds();
+                if (upperBounds.length == 1) {
+                    argType = upperBounds[0];
+                }
+            }
+            this.itemType = argType;
         } else {
             this.itemType = Object.class;
         }
@@ -40,7 +49,10 @@ public class ArrayListTypeFieldDeserializer extends FieldDeserializer {
     @SuppressWarnings("rawtypes")
     @Override
     public void parseField(DefaultJSONParser parser, Object object, Type objectType, Map<String, Object> fieldValues) {
-        if (parser.lexer.token() == JSONToken.NULL) {
+        JSONLexer lexer = parser.lexer;
+        final int token = lexer.token();
+        if (token == JSONToken.NULL
+                || (token == JSONToken.LITERAL_STRING && lexer.stringVal().length() == 0)) {
             setValue(object, null);
             return;
         }
@@ -126,7 +138,8 @@ public class ArrayListTypeFieldDeserializer extends FieldDeserializer {
 
         final JSONLexer lexer = parser.lexer;
 
-        if (lexer.token() == JSONToken.LBRACKET) {
+        final int token = lexer.token();
+        if (token == JSONToken.LBRACKET) {
             if (itemTypeDeser == null) {
                 itemTypeDeser = deserializer = parser.getConfig().getDeserializer(itemType);
                 itemFastMatchToken = deserializer.getFastMatchToken();

@@ -55,6 +55,10 @@ public abstract class FieldDeserializer {
         if (value == null //
             && fieldInfo.fieldClass.isPrimitive()) {
             return;
+        } else if (fieldInfo.fieldClass == String.class
+                && fieldInfo.format != null
+                && fieldInfo.format.equals("trim")){
+            value = ((String) value).trim();
         }
 
         try {
@@ -83,14 +87,14 @@ public abstract class FieldDeserializer {
                         }
                     } else {
                         Collection collection = (Collection) method.invoke(object);
-                        if (collection != null) {
+                        if (collection != null && value != null) {
+                            collection.clear();
                             collection.addAll((Collection) value);
                         }
                     }
                 } else {
                     method.invoke(object, value);
                 }
-                return;
             } else {
                 final Field field = fieldInfo.field;
                 
@@ -117,7 +121,8 @@ public abstract class FieldDeserializer {
                         }
                     } else {
                         Collection collection = (Collection) field.get(object);
-                        if (collection != null) {
+                        if (collection != null && value != null) {
+                            collection.clear();
                             collection.addAll((Collection) value);
                         }
                     }
@@ -130,5 +135,9 @@ public abstract class FieldDeserializer {
         } catch (Exception e) {
             throw new JSONException("set property error, " + fieldInfo.name, e);
         }
+    }
+
+    public void setWrappedValue(String key, Object value) {
+        throw new JSONException("TODO");
     }
 }

@@ -1,19 +1,18 @@
 package com.alibaba.fastjson.support.jaxrs;
 
 import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONException;
 import com.alibaba.fastjson.serializer.SerializeFilter;
 import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.alibaba.fastjson.support.config.FastJsonConfig;
-import com.alibaba.fastjson.util.IOUtils;
 
 import javax.ws.rs.Consumes;
 import javax.ws.rs.Produces;
 import javax.ws.rs.WebApplicationException;
+import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.MultivaluedMap;
-import javax.ws.rs.ext.MessageBodyReader;
-import javax.ws.rs.ext.MessageBodyWriter;
-import javax.ws.rs.ext.Provider;
+import javax.ws.rs.ext.*;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -39,9 +38,8 @@ import java.util.List;
 @Produces({MediaType.WILDCARD})
 public class FastJsonProvider //
         implements MessageBodyReader<Object>, MessageBodyWriter<Object> {
-
     @Deprecated
-    protected Charset charset = IOUtils.UTF8;
+    protected Charset charset = Charset.forName("UTF-8");
 
     @Deprecated
     protected SerializerFeature[] features = new SerializerFeature[0];
@@ -53,6 +51,14 @@ public class FastJsonProvider //
     protected String dateFormat;
 
     /**
+     * Injectable context object used to locate configured
+     * instance of {@link FastJsonConfig} to use for actual
+     * serialization.
+     */
+    @Context
+    protected Providers providers;
+
+    /**
      * with fastJson config
      */
     private FastJsonConfig fastJsonConfig = new FastJsonConfig();
@@ -62,8 +68,10 @@ public class FastJsonProvider //
      */
     private Class<?>[] clazzes = null;
 
-    @javax.ws.rs.core.Context
-    javax.ws.rs.core.UriInfo uriInfo;
+    /**
+     * whether set PrettyFormat while exec WriteTo()
+     */
+    private boolean pretty;
 
 
     /**
@@ -94,6 +102,14 @@ public class FastJsonProvider //
      */
     public FastJsonProvider(Class<?>[] clazzes) {
         this.clazzes = clazzes;
+    }
+
+    /**
+     * Set pretty format
+     */
+    public FastJsonProvider setPretty(boolean p) {
+        this.pretty = p;
+        return this;
     }
 
     /**
@@ -143,6 +159,7 @@ public class FastJsonProvider //
     public void setFilters(SerializeFilter... filters) {
         this.fastJsonConfig.setSerializeFilters(filters);
     }
+
 
     /**
      * Check whether a class can be serialized or deserialized. It can check
@@ -234,9 +251,10 @@ public class FastJsonProvider //
                         OutputStream entityStream //
     ) throws IOException, WebApplicationException {
 
+        FastJsonConfig fastJsonConfig = locateConfigProvider(type, mediaType);
+
         SerializerFeature[] serializerFeatures = fastJsonConfig.getSerializerFeatures();
-        if (uriInfo != null
-                && uriInfo.getQueryParameters().containsKey("pretty")) {
+        if (pretty) {
             if (serializerFeatures == null)
                 serializerFeatures = new SerializerFeature[]{SerializerFeature.PrettyFormat};
             else {
@@ -248,23 +266,31 @@ public class FastJsonProvider //
             fastJsonConfig.setSerializerFeatures(serializerFeatures);
         }
 
-        int len = JSON.writeJSONString(entityStream, //
-                fastJsonConfig.getCharset(), //
-                obj, //
-                fastJsonConfig.getSerializeConfig(), //
-                fastJsonConfig.getSerializeFilters(), //
-                fastJsonConfig.getDateFormat(), //
-                JSON.DEFAULT_GENERATE_FEATURE, //
-                fastJsonConfig.getSerializerFeatures());
+        try {
+            int len = JSON.writeJSONString(entityStream, //
+                    fastJsonConfig.getCharset(), //
+                    obj, //
+                    fastJsonConfig.getSerializeConfig(), //
+                    fastJsonConfig.getSerializeFilters(), //
+                    fastJsonConfig.getDateFormat(), //
+                    JSON.DEFAULT_GENERATE_FEATURE, //
+                    fastJsonConfig.getSerializerFeatures());
 
-        // add Content-Length
-        httpHeaders.add("Content-Length", len);
+//            // add Content-Length
+//            if (fastJsonConfig.isWriteContentLength()) {
+//                httpHeaders.add("Content-Length", String.valueOf(len));
+//            }
 
-        entityStream.flush();
+            entityStream.flush();
+
+        } catch (JSONException ex) {
+
+            throw new WebApplicationException("Could not write JSON: " + ex.getMessage(), ex);
+        }
     }
 
 	/*
-	 * /********************************************************** /*
+     * /********************************************************** /*
 	 * MessageBodyReader impl
 	 * /**********************************************************
 	 */
@@ -294,6 +320,39 @@ public class FastJsonProvider //
                            MediaType mediaType, //
                            MultivaluedMap<String, String> httpHeaders, //
                            InputStream entityStream) throws IOException, WebApplicationException {
-        return JSON.parseObject(entityStream, fastJsonConfig.getCharset(), genericType, fastJsonConfig.getFeatures());
+
+        try {
+            FastJsonConfig fastJsonConfig = locateConfigProvider(type, mediaType);
+
+            return JSON.parseObject(entityStream, fastJsonConfig.getCharset(), genericType, fastJsonConfig.getFeatures());
+
+        } catch (JSONException ex) {
+
+            throw new WebApplicationException("JSON parse error: " + ex.getMessage(), ex);
+        }
     }
+
+    /**
+     * Helper method that is called if no config has been explicitly configured.
+     */
+    protected FastJsonConfig locateConfigProvider(Class<?> type, MediaType mediaType) {
+
+        if (providers != null) {
+
+            ContextResolver<FastJsonConfig> resolver = providers.getContextResolver(FastJsonConfig.class, mediaType);
+
+            if (resolver == null) {
+
+                resolver = providers.getContextResolver(FastJsonConfig.class, null);
+            }
+
+            if (resolver != null) {
+
+                return resolver.getContext(type);
+            }
+        }
+
+        return fastJsonConfig;
+    }
+
 }

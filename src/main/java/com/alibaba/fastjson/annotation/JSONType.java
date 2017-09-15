@@ -39,6 +39,11 @@ public @interface JSONType {
      * @since 1.2.11
      */
     String typeName() default "";
+
+    /**
+     * @since 1.2.32
+     */
+    String typeKey() default "";
     
     /**
      * @since 1.2.11
@@ -54,4 +59,6 @@ public @interface JSONType {
      * @since 1.2.14
      */
     Class<?> deserializer() default Void.class;
+
+    boolean serializeEnumAsJavaBean() default false;
 }

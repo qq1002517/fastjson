@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2101 Alibaba Group.
+ * Copyright 1999-2017 Alibaba Group.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,9 +15,12 @@
  */
 package com.alibaba.fastjson.serializer;
 
+import com.alibaba.fastjson.util.TypeUtils;
+
 import java.io.IOException;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.lang.reflect.WildcardType;
 import java.util.List;
 
 /**
@@ -36,10 +39,7 @@ public final class ListSerializer implements ObjectSerializer {
 
         Type elementType = null;
         if (writeClassName) {
-            if (fieldType instanceof ParameterizedType) {
-                ParameterizedType param = (ParameterizedType) fieldType;
-                elementType = param.getActualTypeArguments()[0];
-            }
+            elementType = TypeUtils.getCollectionItemType(fieldType);
         }
 
         if (object == null) {
@@ -114,16 +114,21 @@ public final class ListSerializer implements ObjectSerializer {
                             out.writeLong(val);
                         }
                     } else {
-                        if (!out.disableCircularReferenceDetect) {
-                            SerialContext itemContext = new SerialContext(context, object, fieldName, 0, 0);
-                            serializer.context = itemContext;
-                        }
-
-                        if (serializer.containsReference(item)) {
-                            serializer.writeReference(item);
-                        } else {
+                        if( (SerializerFeature.DisableCircularReferenceDetect.mask&features) != 0){
                             itemSerializer = serializer.getObjectWriter(item.getClass());
-                            itemSerializer.write(serializer, item, i, elementType, 0);
+                            itemSerializer.write(serializer, item, i, elementType, features);
+                        }else {
+                            if (!out.disableCircularReferenceDetect) {
+                                SerialContext itemContext = new SerialContext(context, object, fieldName, 0, 0);
+                                serializer.context = itemContext;
+                            }
+
+                            if (serializer.containsReference(item)) {
+                                serializer.writeReference(item);
+                            } else {
+                                itemSerializer = serializer.getObjectWriter(item.getClass());
+                                itemSerializer.write(serializer, item, i, elementType, 0);
+                            }
                         }
                     }
                 }
